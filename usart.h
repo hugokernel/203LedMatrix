@@ -19,8 +19,8 @@ It could also be a uint8_t type */
 volatile char receivedBuffer;
 
 ISR(USART_RX_vect){
-   value = UDR0;             //read UART register into value
-   receivedBuffer = value;
+    receivedBuffer = UDR0;
+    WATCHDOG_RESET
 }
 
 void USART_Init(void){
