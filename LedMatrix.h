@@ -11,7 +11,9 @@
 #include <avr/sleep.h>  
 #include <avr/eeprom.h> 
 #include <string.h>
-#include <stdlib.h> 
+#include <stdlib.h>
+
+#include "font5x7.h"
 
 /*
 #include <avr/wdt.h> 
@@ -24,13 +26,14 @@
 #define F_CPU 8000000
 #endif
 
-#define INTERACTIVE_MODE    0   // Menu
+#define INTERACTIVE_MODE    1   // Menu
 #define SYNCHRONIZE         1   // Wait for new line before start to change message
 
 #define EEPROM_CONFIG_ADDR_SPEED        0
 #define EEPROM_CONFIG_ADDR_DIRECTION    1
 #define EEPROM_CONFIG_ADDR_SPACING      2
 #define EEPROM_CONFIG_ADDR_INTENSITY    3
+#define EEPROM_CONFIG_ADDR_WATCHDOG     4
 #define EEPROM_CONFIG_ADDR_MESSAGE      10
 
 // Pour savoir si la zone est valide ou non
@@ -39,7 +42,12 @@
 #define INTERNAL_MESSAGE_COUNT          4
 
 #define LOW(x)  ((x) & 0xFF)
-#define HIGH(x) (((x) >> 8) & 0xFF) 
+#define HIGH(x) (((x) >> 8) & 0xFF)
+
+
+//#define SBI(port, bit) (port) |= (1 << (bit))
+//#define CBI(port, bit) (port) &= ~(1 << (bit))
+
 
 unsigned char scroll_speed = 5;
 unsigned char scroll_direction = 1;
@@ -67,10 +75,17 @@ char char_spacing_value[] = { 5, 5, 4, 4, 3, 3, 3, 3, 2, 2 };
                             message_size = strlen(message);
 
 #if INTERACTIVE_MODE
-#define MESSAGE_SIZE    1 + 120     // (1:magic character)
+#define MESSAGE_SIZE    1 + 80     // (1:magic character)
 #else
 #define MESSAGE_SIZE    350 - 3 - 1 // (3:speed,direction,spacing, 1:0)
 #endif
+
+char message[MESSAGE_SIZE]; //160
+
+#if INTERACTIVE_MODE
+unsigned char current_message = 0;
+#endif
+
 
 // Calcul : value = timeout(sec) / (1 / F_CPU * 1024 * 255)
 unsigned int watchdog_table[] = {
@@ -82,17 +97,11 @@ unsigned char watchdog_value = 0;
 #define WATCHDOG_ERROR_MSG  "Watchdog error : no com !"
 #define WATCHDOG_RESET      watchdog_counter = 0;
 
-
-char message[MESSAGE_SIZE]; //160
-unsigned char current_message = 0;
-
 extern volatile char receivedBuffer;
 
 #include "usart.h"
 
 static FILE mystdout = FDEV_SETUP_STREAM(USART_SendByte, NULL, _FDEV_SETUP_WRITE);
-
-#include "font5x7.h"
 
 #define _DDRB   0
 #define _DDRC   1
@@ -101,8 +110,8 @@ static FILE mystdout = FDEV_SETUP_STREAM(USART_SendByte, NULL, _FDEV_SETUP_WRITE
 #define _PORTC  4
 #define _PORTD  5
 
-#define MATRIX_COL_COUNT 29
-#define MATRIX_LINE_COUNT 7
+#define MATRIX_COL_COUNT    29
+#define MATRIX_LINE_COUNT   7
 
 #define STEP 1
 

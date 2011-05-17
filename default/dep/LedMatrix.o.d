@@ -21,7 +21,7 @@ LedMatrix.o: ../LedMatrix.c ../LedMatrix.h \
  c:\program\ files\atmel\avr\ tools\avr\ toolchain\bin\../lib/gcc/avr/4.4.3/../../../../avr/include/avr/eeprom.h \
  c:\program\ files\atmel\avr\ tools\avr\ toolchain\bin\../lib/gcc/avr/4.4.3/../../../../avr/include/string.h \
  c:\program\ files\atmel\avr\ tools\avr\ toolchain\bin\../lib/gcc/avr/4.4.3/../../../../avr/include/stdlib.h \
- ../usart.h ../font5x7.h
+ ../font5x7.h ../usart.h
 
 ../LedMatrix.h:
 
@@ -69,6 +69,6 @@ c:\program\ files\atmel\avr\ tools\avr\ toolchain\bin\../lib/gcc/avr/4.4.3/../..
 
 c:\program\ files\atmel\avr\ tools\avr\ toolchain\bin\../lib/gcc/avr/4.4.3/../../../../avr/include/stdlib.h:
 
-../usart.h:
-
 ../font5x7.h:
+
+../usart.h:

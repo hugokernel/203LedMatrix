@@ -13,15 +13,15 @@ inline void setLed(unsigned int x, unsigned int y) {
 
     DDRB = pgm_read_byte(&(matrix[x][y][_DDRB]));
     DDRC = pgm_read_byte(&(matrix[x][y][_DDRC]));
-    DDRD = pgm_read_byte(&(matrix[x][y][_DDRD]));
+    //DDRD = pgm_read_byte(&(matrix[x][y][_DDRD]));
 
-    //DDRD = (PORTD & 0b11100000) ^ pgm_read_byte(&(matrix[x][y][_DDRD]));
+    DDRD = 0b11100000 & pgm_read_byte(&(matrix[x][y][_DDRD]));
 
     PORTB = pgm_read_byte(&(matrix[x][y][_PORTB]));
     PORTC = pgm_read_byte(&(matrix[x][y][_PORTC]));
-    PORTD = pgm_read_byte(&(matrix[x][y][_PORTD]));
+    //PORTD = pgm_read_byte(&(matrix[x][y][_PORTD]));
 
-    //PORTD = (PORTD & 0b11100000) ^ pgm_read_byte(&(matrix[x][y][_PORTD]));
+    PORTD = 0b11100000 & pgm_read_byte(&(matrix[x][y][_PORTD]));
 }
 
 inline void clearLeds() {
@@ -170,16 +170,16 @@ void writeMenu() {
     printf("M:[%i], S:[%i], D:[%i], L:[%i], C:[%i]\n\r", current_message, scroll_speed, scroll_direction, char_spacing, auto_chain_message);
     
     printf("Action :\n\r");
-    printf(" [0...3] Select message\n\r");
-    printf(" [t] Edit message\n\r");
-    //printf(" [c] Clear\n\r");
+    printf(" [0...3] Select msg\n\r");
+    printf(" [t] Edit msg\n\r");
+    printf(" [c] Clear\n\r");
 
     printf(" [s] Set scroll speed...\n\r");
-    printf(" [d] Reverse direction\n\r");
     printf(" [l] Letter spacing...\n\r");
 
-    printf(" [a] Chain mode...\n\r");
-    printf(" [w] Save configuration to EEPROM\n\r");
+    printf(" [d] Reverse direction\n\r");
+    printf(" [a] Chain mode\n\r");
+    printf(" [w] Save conf to EEPROM\n\r");
     printf(" [b] Read button...\n\r");
 }
 
@@ -217,6 +217,7 @@ void handleAction() {
                     auto_chain_message = 0;
                 }
 
+                message_size = 0;
                 while (1) {
                     if (!receivedBuffer) {
                         continue;
@@ -231,16 +232,16 @@ void handleAction() {
 
                     // Return ?
                     if (receivedBuffer == 8) {
-                        message[--_index] = 0;
+                        message[--message_size] = 0;
                         receivedBuffer = 0;
                         continue;
                     }
 
-                    message[_index++] = receivedBuffer;
+                    message[message_size++] = receivedBuffer;
                     receivedBuffer = 0;
 
                     // Test max string size
-                    if (_index == sizeof(message) - 1) {
+                    if (message_size == sizeof(message) - 1) {
                         strcat(action, "Message size reached !\n\r");
                         break;
                     }
@@ -433,7 +434,7 @@ void handleAction() {
     int size = 0;
 
     char key, key_tmp = 0;
-    char value = 0;
+    char value, in = 0;
 
     SEND_ACK
 
@@ -522,8 +523,6 @@ void handleAction() {
 #endif
 
                 debug(", set msg :\n\r");
-                //TIMSK0 = 0;
-                //TIMSK1 = 0;
 
                 message_size = 0;
                 memset(message, 0, sizeof(message));
@@ -548,9 +547,6 @@ void handleAction() {
 
                     data = waitData();
                 }
-
-                //TIMSK0 |= (1<<TOIE0);
-                //TIMSK1 |= (1<<TOIE1);
 
                 _delay_ms(500);
 
@@ -600,9 +596,17 @@ void handleAction() {
 
         debug(", wait validation...");
         while (1) {
+            in = waitData();
+
             // Wait Return
-            if (waitData() == 13) {
+            if (in == 13) {
                 break;
+            }
+
+            // Cancel ?
+            if (in == 27) {
+                debug("Cancelled !");
+                goto end;
             }
         }
 
@@ -610,25 +614,28 @@ void handleAction() {
             debug("Arg not valid !");
             goto end;
         }
+        
+        // Send value for ACK
+        if (!verbose) {
+            USART_SendByte(data);
+        } else {
+            printf(", run '%c', arg '%c' ", command, data);
+        }
 
-        debug(", run '%c', arg '%c' ", command, data);
         data = data - '0';
 
         switch (command) {
             case 's':
                 scroll_speed = data;
                 eeprom_update_byte((const void*)EEPROM_CONFIG_ADDR_SPEED, scroll_speed);
-                SEND_ACK
                 break;
             case 'd':
                 scroll_direction = data;
                 eeprom_update_byte((const void*)EEPROM_CONFIG_ADDR_DIRECTION, scroll_direction);
-                SEND_ACK
                 break;
             case 'l':
                 char_spacing = data;
                 eeprom_update_byte((const void*)EEPROM_CONFIG_ADDR_SPACING, char_spacing);
-                SEND_ACK
                 break;
             case 'w':
                 watchdog_value = data;
@@ -638,7 +645,7 @@ void handleAction() {
                 } else {
                     TIMSK2 = 0;
                 }
-                SEND_ACK
+                eeprom_update_byte((const void*)EEPROM_CONFIG_ADDR_WATCHDOG, watchdog_value);
                 break;
             case 'i':
                 intensity = data;
@@ -650,12 +657,9 @@ void handleAction() {
                     TCCR0B = (1<<CS02);
                 }
 
-                SEND_ACK
                 break;
             case 'v':
                 verbose = data;
-                SEND_ACK
-                goto end;
         }
 
 end:
@@ -787,6 +791,8 @@ void saveMessage(unsigned char num) {
 #endif
 
 void loadData() {
+    int i = 0;
+
 #if INTERACTIVE_MODE
     // Load data
     loadMessage(current_message);
@@ -794,9 +800,9 @@ void loadData() {
     eeprom_read_block((void*)&message, (const void*)EEPROM_CONFIG_ADDR_MESSAGE, sizeof(message));
 
     // First boot ?
-    int i = 0;
     char found = 0;
     for (i = 0; i < sizeof(message); i++) {
+        // No 0 ?
         if (!message[i]) {
             found = 1;
             break;
@@ -810,6 +816,24 @@ void loadData() {
 
     message_size = strlen(message);
 
+/*
+    char load_table[] = {
+        scroll_speed,       EEPROM_CONFIG_ADDR_SPEED,
+        scroll_direction,   EEPROM_CONFIG_ADDR_DIRECTION,
+        char_spacing,       EEPROM_CONFIG_ADDR_SPACING,
+        intensity,          EEPROM_CONFIG_ADDR_INTENSITY,
+        watchdog_value,     EEPROM_CONFIG_ADDR_WATCHDOG
+    };
+
+    for (i = 0; i < sizeof(load_table); i++) {
+        load_table[i] = eeprom_read_byte(load_table[i + 1]);
+        if (load_table[i] < 0 || load_table[i] > 9) {
+            load_table[i] = 1;
+            eeprom_update_byte(load_table[i + 1], load_table[i]);
+        }
+    }
+*/
+
     scroll_speed = eeprom_read_byte((const void*)EEPROM_CONFIG_ADDR_SPEED);
     if (scroll_speed >= 9) {
         scroll_speed = 9;
@@ -817,21 +841,27 @@ void loadData() {
     }
 
     scroll_direction = eeprom_read_byte((const void*)EEPROM_CONFIG_ADDR_DIRECTION);
-    if (scroll_direction >= 1) {
-        scroll_direction = 1;
+    if (scroll_direction >= 9) {
+        scroll_direction = 9;
         eeprom_update_byte((const void*)EEPROM_CONFIG_ADDR_DIRECTION, scroll_direction);
     }
 
     char_spacing = eeprom_read_byte((const void*)EEPROM_CONFIG_ADDR_SPACING);
-    if (char_spacing >= 1) {
-        char_spacing = 1;
+    if (char_spacing >= 9) {
+        char_spacing = 9;
         eeprom_update_byte((const void*)EEPROM_CONFIG_ADDR_SPACING, char_spacing);
     }
 
     intensity = eeprom_read_byte((const void*)EEPROM_CONFIG_ADDR_INTENSITY);
-    if (intensity >= 1) {
-        intensity = 1;
+    if (intensity >= 9) {
+        intensity = 9;
         eeprom_update_byte((const void*)EEPROM_CONFIG_ADDR_INTENSITY, intensity);
+    }
+
+    watchdog_value = eeprom_read_byte((const void*)EEPROM_CONFIG_ADDR_WATCHDOG);
+    if (watchdog_value >= 9) {
+        watchdog_value = 9;
+        eeprom_update_byte((const void*)EEPROM_CONFIG_ADDR_WATCHDOG, watchdog_value);
     }
 }
 
@@ -858,9 +888,6 @@ int main(void) {
     TCCR2B |= ((1<<CS22) | (1<<CS21) | (1<<CS20));
     TCNT2 = 0;
 
-    //DDRD = 2;
-    //PORTD = 0;
-
     // Init ADC
     //ADMUX |= (0 << REFS1) | (0 << REFS0) | (1 << MUX2) | (1 << MUX1);
     ADMUX = 0b01100110;
@@ -869,16 +896,20 @@ int main(void) {
     ADCSRA |= (1 << ADEN) | (1 << ADIE);
 
     USART_Init();
-
     stdout = &mystdout;
 
     memset(message, 0, sizeof(message));
 
+#if INTERACTIVE_MODE
     current_message = 0;
+#endif
 
     loadData();
 
     sei();
+
+    DDRD = 0;
+    PORTD = 0;
 
     handleAction();
 }
